@@ -13,13 +13,12 @@
 
 using namespace cv;
 
-const double gamma = 1 / 2.2;
 
+int timeout = 1000 / 60;
+double gamma = 0.6;
 double bound_err = 20;
-
 int erosion_size = 5;
 int dilation_size = 1;
-
 float minRadius = 10;
 
 Scalar lowerBound;
@@ -44,17 +43,16 @@ int main(int argc, char** argv)
 		return 1;
 	}
 
+	Mat raw;
 	Mat frame;
 	Mat image;
 	Mat detect;
 	Mat postImage;
 
 	String wName = "videocapture";
-	int timeout = 1000 / 60;
 
 	namedWindow(wName, 1);
 
-	double gamma = 0.67;
 	uchar* p = gammaTable.ptr();
 	for (int i = 0; i < 256; ++i)
 		p[i] = saturate_cast<uchar>(pow(i / 255.0, gamma) * 255.0);
@@ -63,7 +61,8 @@ int main(int argc, char** argv)
 	for (;;) {
 		// loop begin
 		// get a new frame from camera
-		cap >> frame;
+		cap >> raw;
+		flip(raw, frame, 1);
 
 		image = preprocess(frame);
 
@@ -133,18 +132,18 @@ Mat preprocess(Mat& src)
 	Mat src_corrected = gblur.clone();
 	LUT(gblur, gammaTable, src_corrected);
 
-	return gblur;
+	Mat hsv;
+	cvtColor(gblur, hsv, COLOR_BGR2HSV);
+	return hsv;
 }
 
 Mat ppDetect(Mat& src)
 {
-	Mat hsv;
 	Mat mask;
 	Mat dst;
 
 	// color detection
-	cvtColor(src, hsv, COLOR_BGR2HSV);
-	inRange(hsv, lowerBound, upperBound, mask);
+	inRange(src, lowerBound, upperBound, mask);
 
 	// erosion
 	Mat mask_erode;
