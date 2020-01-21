@@ -8,12 +8,21 @@
 #include "opencv2/imgcodecs.hpp"
 #include "opencv2/highgui.hpp"
 #include <iostream>
-#include <iostream>
+#include <stdio.h>
 #include <string.h>
 
 using namespace cv;
 
-Mat gammaCorrection(const Mat& img, Mat& lookUpTable, const double gamma_);
+const double gamma = 1 / 2.2;
+
+Scalar lowerBound = Scalar(100, 100, 100);
+Scalar upperBound = Scalar(255, 255, 200);
+
+Mat gammaTable(1, 256, CV_8U);
+
+Mat preprocess(Mat& src);
+Mat ppDetect(Mat& src);
+Mat postprocess(Mat& frame, Mat& image, Mat& detect);
 
 int main()
 {
@@ -31,9 +40,9 @@ int main()
 	}
 
 	Mat frame;
-    Mat image;
-	Mat hsv_image;
-	Mat blues;
+	Mat image;
+	Mat detect;
+	Mat postImage;
 
 	String wName = "videocapture";
 	int timeout = 30;
@@ -41,8 +50,7 @@ int main()
 	namedWindow(wName, 1);
 
 	double gamma = 0.67;
-	Mat lookUpTable(1, 256, CV_8U);
-	uchar* p = lookUpTable.ptr();
+	uchar* p = gammaTable.ptr();
 	for (int i = 0; i < 256; ++i)
 		p[i] = saturate_cast<uchar>(pow(i / 255.0, gamma) * 255.0);
 	// setup end
@@ -52,26 +60,16 @@ int main()
 		// get a new frame from camera
 		cap >> frame;
 
-		// find a blue circle begin
-		cvtColor(frame, hsv_image, COLOR_BGR2HSV);
-		inRange(hsv_image, Scalar(100, 100, 100), Scalar(255, 255, 200), blues);
-		// find a blue circle end
+		image = preprocess(frame);
 
-		// show the frame
-		//imshow(wName, blues);
-		//Mat res = image.clone();
-		//LUT(image, lookUpTable, res);
-        //imshow(wName, image);
-		Mat image = gammaCorrection(frame, lookUpTable, 1/2.2);
+		detect= ppDetect(image);
 
-		Mat img_gamma_corrected;
+		postImage = postprocess(frame, image, detect);
 
-		hconcat(frame, image, img_gamma_corrected);
-		imshow(wName, img_gamma_corrected);
+		imshow(wName, postImage);
 
 		// key check with timeout
 		if (waitKey(timeout) >= 0) break;
-
 		if (getWindowProperty(wName, WND_PROP_VISIBLE) == 0) break;
 		// loop end
 	}
@@ -79,13 +77,49 @@ int main()
 	return 0;
 }
 
-Mat gammaCorrection(const Mat& img, Mat& lookUpTable, const double gamma_)
+Mat preprocess(Mat& src)
 {
-	CV_Assert(gamma_ >= 0);
+	Mat hsv;
+	Mat mask;
 
-	Mat res = img.clone();
+	// gamma correction
+	//CV_Assert(gamma >= 0);
+	//Mat src_corrected = hsv.clone();
+	//LUT(src, gammaTable, src_corrected);
 
-	LUT(img, lookUpTable, res);
+	cvtColor(src, hsv, COLOR_BGR2HSV);
+	//cvtColor(src_corrected, hsv, COLOR_BGR2HSV);
 
-	return res;
+
+	return hsv;
+}
+
+Mat ppDetect(Mat& src)
+{
+	Mat mask;
+	Mat mask_erode;
+	Mat dst;
+
+	// color detection
+	inRange(src, lowerBound, upperBound, mask);
+
+	// erosion
+	int erosion_size = 1;
+	Mat element = getStructuringElement(MORPH_ELLIPSE,
+		Size(2 * erosion_size + 1, 2 * erosion_size + 1),
+		Point(erosion_size, erosion_size));
+	erode(mask, mask_erode, element);
+
+	return mask_erode;
+}
+
+Mat postprocess(Mat& frame, Mat& image, Mat& detect)
+{
+	Mat detect_bgr;
+	Mat dst;
+
+	cvtColor(detect, detect_bgr, COLOR_GRAY2BGR);
+	hconcat(frame, detect_bgr, dst);
+
+	return dst;
 }
