@@ -14,25 +14,25 @@
 using namespace cv;
 
 const double gamma = 1 / 2.2;
+double bound_err = 30;
+int erosion_size = 5;
 
-Scalar lowerBound = Scalar(100, 100, 100);
-Scalar upperBound = Scalar(255, 255, 200);
+Scalar lowerBound;
+Scalar upperBound;
 
 Mat gammaTable(1, 256, CV_8U);
 
+void setup_orange();
 Mat preprocess(Mat& src);
 Mat ppDetect(Mat& src);
 Mat postprocess(Mat& frame, Mat& image, Mat& detect);
 
-int main()
+int main(int argc, char** argv)
 {
-	// Mat image = Mat::zeros(300, 600, CV_8UC3);
-	// circle(image, Point(250, 150), 100, Scalar(0, 255, 128), -100);
-	// circle(image, Point(350, 150), 100, Scalar(255, 255, 255), -100);
-	// imshow("Display Window", image);
-	// waitKey(0);
-
 	// setup begin
+
+	setup_orange();
+
 	VideoCapture cap(0);
 	if (!cap.isOpened()) {
 		std::cout << "Video Capture is not opened." << std::endl;
@@ -45,7 +45,7 @@ int main()
 	Mat postImage;
 
 	String wName = "videocapture";
-	int timeout = 30;
+	int timeout = 1000 / 60;
 
 	namedWindow(wName, 1);
 
@@ -77,34 +77,72 @@ int main()
 	return 0;
 }
 
+void setup_orange()
+{
+	Mat orange = imread("orange.png", IMREAD_COLOR);
+	printf(">> orange !!! \n");
+	printf("|  width \t = %d \n", orange.rows);
+	printf("|  height \t = %d \n", orange.cols);
+	printf("|  channels \t = %d \n", orange.channels());
+
+	Mat orange_blur;
+	GaussianBlur(orange, orange_blur, Size(15, 15), 75, 0);
+
+	Mat orange_hsv;
+	cvtColor(orange_blur, orange_hsv, COLOR_BGR2HSV);
+
+	int nChannels = orange_hsv.channels();
+	Mat* orangeChannels = new Mat[nChannels];
+	split(orange_hsv, orangeChannels);
+
+	double* x_min = new double[nChannels];
+	double* x_max = new double[nChannels];
+
+	printf("|  ----\n");
+	printf("|  min \t\t max\n");
+	for (int i = 0; i < nChannels; i++) {
+		minMaxLoc(orangeChannels[i], &x_min[i], &x_max[i]);
+		printf("|  %.2f \t %.2f\n", x_min[i], x_max[i]);
+	}
+
+	CV_Assert(nChannels == 3);
+	lowerBound = Scalar(x_min[0] - bound_err,
+		x_min[1] - bound_err,
+		x_min[2] - bound_err);
+	upperBound = Scalar(x_max[0] + bound_err,
+		x_max[1] + bound_err,
+		x_max[2] + bound_err);
+
+	printf("\n\n\n");
+}
+
 Mat preprocess(Mat& src)
 {
-	Mat hsv;
+	Mat gblur;
 	Mat mask;
 
+	GaussianBlur(src, gblur, Size(5, 5), 125, 0);
+
 	// gamma correction
-	//CV_Assert(gamma >= 0);
-	//Mat src_corrected = hsv.clone();
-	//LUT(src, gammaTable, src_corrected);
+	CV_Assert(gamma >= 0);
+	Mat src_corrected = gblur.clone();
+	LUT(gblur, gammaTable, src_corrected);
 
-	cvtColor(src, hsv, COLOR_BGR2HSV);
-	//cvtColor(src_corrected, hsv, COLOR_BGR2HSV);
-
-
-	return hsv;
+	return gblur;
 }
 
 Mat ppDetect(Mat& src)
 {
+	Mat hsv;
 	Mat mask;
 	Mat mask_erode;
 	Mat dst;
 
 	// color detection
-	inRange(src, lowerBound, upperBound, mask);
+	cvtColor(src, hsv, COLOR_BGR2HSV);
+	inRange(hsv, lowerBound, upperBound, mask);
 
 	// erosion
-	int erosion_size = 1;
 	Mat element = getStructuringElement(MORPH_ELLIPSE,
 		Size(2 * erosion_size + 1, 2 * erosion_size + 1),
 		Point(erosion_size, erosion_size));
@@ -115,11 +153,13 @@ Mat ppDetect(Mat& src)
 
 Mat postprocess(Mat& frame, Mat& image, Mat& detect)
 {
+	Mat tmp;
 	Mat detect_bgr;
 	Mat dst;
 
 	cvtColor(detect, detect_bgr, COLOR_GRAY2BGR);
-	hconcat(frame, detect_bgr, dst);
+	hconcat(frame, image, tmp);
+	hconcat(tmp, detect_bgr, dst);
 
 	return dst;
 }
