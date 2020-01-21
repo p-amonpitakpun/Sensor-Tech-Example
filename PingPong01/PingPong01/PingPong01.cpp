@@ -14,9 +14,13 @@
 using namespace cv;
 
 const double gamma = 1 / 2.2;
-double bound_err = 30;
+
+double bound_err = 20;
+
 int erosion_size = 5;
-int dilation_size = 5;
+int dilation_size = 1;
+
+float minRadius = 10;
 
 Scalar lowerBound;
 Scalar upperBound;
@@ -87,7 +91,7 @@ void setup_orange()
 	printf("|  channels \t = %d \n", orange.channels());
 
 	Mat orange_blur;
-	GaussianBlur(orange, orange_blur, Size(15, 15), 75, 0);
+	GaussianBlur(orange, orange_blur, Size(15, 15), 45, 0);
 
 	Mat orange_hsv;
 	cvtColor(orange_blur, orange_hsv, COLOR_BGR2HSV);
@@ -161,13 +165,43 @@ Mat ppDetect(Mat& src)
 
 Mat postprocess(Mat& frame, Mat& image, Mat& detect)
 {
-	Mat tmp;
+	Mat tmp1, tmp2;
 	Mat detect_bgr;
+	Mat draw = frame.clone();
 	Mat dst;
 
+	// find contours
+	std::vector<std::vector<Point>> contours;
+	findContours(detect, contours, RETR_TREE, CHAIN_APPROX_SIMPLE, Point(0, 0));
+
+	// if there is any contour
+	if (contours.size() > 0) {
+
+		// find the largest contour
+		std::vector<Point> maxContour = contours.at(0);
+		double maxArea = contourArea(maxContour);
+		for (int i = 0; i < contours.size(); i++) {
+			std::vector<Point> contour = contours.at(i);
+			double area = contourArea(contour);
+			if (area >= maxArea) {
+				maxContour = contour;
+				maxArea = area;
+			}
+		}
+
+		// find the min enclosing circle
+		Point2f center;
+		float radius;
+		minEnclosingCircle(maxContour, center, radius);
+
+		if (radius > minRadius)
+			circle(draw, center, radius, Scalar(0, 0, 255), 5);
+	}
+
 	cvtColor(detect, detect_bgr, COLOR_GRAY2BGR);
-	hconcat(frame, image, tmp);
-	hconcat(tmp, detect_bgr, dst);
+	hconcat(frame, image, tmp1);
+	hconcat(detect_bgr, draw,tmp2);
+	vconcat(tmp1, tmp2, dst);
 
 	return dst;
 }
