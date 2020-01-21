@@ -16,6 +16,7 @@ using namespace cv;
 const double gamma = 1 / 2.2;
 double bound_err = 30;
 int erosion_size = 5;
+int dilation_size = 5;
 
 Scalar lowerBound;
 Scalar upperBound;
@@ -135,7 +136,6 @@ Mat ppDetect(Mat& src)
 {
 	Mat hsv;
 	Mat mask;
-	Mat mask_erode;
 	Mat dst;
 
 	// color detection
@@ -143,12 +143,20 @@ Mat ppDetect(Mat& src)
 	inRange(hsv, lowerBound, upperBound, mask);
 
 	// erosion
-	Mat element = getStructuringElement(MORPH_ELLIPSE,
+	Mat mask_erode;
+	Mat erode_element = getStructuringElement(MORPH_ELLIPSE,
 		Size(2 * erosion_size + 1, 2 * erosion_size + 1),
 		Point(erosion_size, erosion_size));
-	erode(mask, mask_erode, element);
+	erode(mask, mask_erode, erode_element);
 
-	return mask_erode;
+	// dilate
+	Mat mask_dilate;
+	Mat dilate_element = getStructuringElement(MORPH_ELLIPSE,
+		Size(2 * dilation_size + 1, 2 * dilation_size + 1),
+		Point(dilation_size, dilation_size));
+	dilate(mask_erode, mask_dilate, dilate_element);
+
+	return mask_dilate;
 }
 
 Mat postprocess(Mat& frame, Mat& image, Mat& detect)
