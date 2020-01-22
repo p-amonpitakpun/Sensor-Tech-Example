@@ -14,12 +14,14 @@
 using namespace cv;
 
 
-int timeout = 1000 / 60;
-double gamma = 0.6;
-double bound_err = 20;
-int erosion_size = 5;
-int dilation_size = 1;
-float minRadius = 10;
+int timeout = 25;
+double gamma = 0.9;
+double bound_err = 10;
+int erosion_size = 4;
+int dilation_size = 2;
+float minRadius = 5;
+
+double circularity = 0.0;
 
 Scalar lowerBound;
 Scalar upperBound;
@@ -34,17 +36,26 @@ Mat postprocess(Mat& frame, Mat& image, Mat& detect);
 int main(int argc, char** argv)
 {
 	// setup begin
+	lowerBound = Scalar(13, 110, 200);
+	upperBound = Scalar(17, 255, 255);
 
-	setup_orange();
+	/*try {
+		printf("\r\n>> setup the ORANGE!\r\n");
+		setup_orange();
+	}
+	catch (const std::exception& e) {
+		std::cout << e.what() << std::endl;
+		printf("\r\n>> can't find the ORANGE!\r\n");
+	}*/
+
 
 	VideoCapture cap(0);
 	if (!cap.isOpened()) {
-		std::cout << "Video Capture is not opened." << std::endl;
+		printf(">> webcam error\r\n");
 		return 1;
 	}
 
 	Mat raw;
-	Mat frame;
 	Mat image;
 	Mat detect;
 	Mat postImage;
@@ -61,8 +72,9 @@ int main(int argc, char** argv)
 	for (;;) {
 		// loop begin
 		// get a new frame from camera
-		cap >> raw;
-		flip(raw, frame, 1);
+		Mat frame;
+		cap >> frame;
+		//flip(raw, frame, 1);
 
 		image = preprocess(frame);
 
@@ -83,14 +95,14 @@ int main(int argc, char** argv)
 
 void setup_orange()
 {
-	Mat orange = imread("orange.png", IMREAD_COLOR);
+	Mat orange = imread(samples::findFile("orange.png"), IMREAD_COLOR);
 	printf(">> orange !!! \n");
 	printf("|  width \t = %d \n", orange.rows);
 	printf("|  height \t = %d \n", orange.cols);
 	printf("|  channels \t = %d \n", orange.channels());
 
 	Mat orange_blur;
-	GaussianBlur(orange, orange_blur, Size(15, 15), 45, 0);
+	GaussianBlur(orange, orange_blur, Size(15, 15), 25, 0);
 
 	Mat orange_hsv;
 	cvtColor(orange_blur, orange_hsv, COLOR_BGR2HSV);
@@ -110,12 +122,12 @@ void setup_orange()
 	}
 
 	CV_Assert(nChannels == 3);
-	lowerBound = Scalar(x_min[0] - bound_err,
-		x_min[1] - bound_err,
-		x_min[2] - bound_err);
-	upperBound = Scalar(x_max[0] + bound_err,
-		x_max[1] + bound_err,
-		x_max[2] + bound_err);
+	lowerBound = Scalar(x_min[0] - 10,
+		x_min[1],
+		x_min[2] - 10);
+	upperBound = Scalar(x_max[0] + 10,
+		255,
+		255);
 
 	printf("\n\n\n");
 }
@@ -125,7 +137,7 @@ Mat preprocess(Mat& src)
 	Mat gblur;
 	Mat mask;
 
-	GaussianBlur(src, gblur, Size(5, 5), 125, 0);
+	GaussianBlur(src, gblur, Size(5, 5), 5, 0);
 
 	// gamma correction
 	CV_Assert(gamma >= 0);
@@ -133,7 +145,7 @@ Mat preprocess(Mat& src)
 	LUT(gblur, gammaTable, src_corrected);
 
 	Mat hsv;
-	cvtColor(gblur, hsv, COLOR_BGR2HSV);
+	cvtColor(src_corrected, hsv, COLOR_BGR2HSV);
 	return hsv;
 }
 
@@ -145,20 +157,22 @@ Mat ppDetect(Mat& src)
 	// color detection
 	inRange(src, lowerBound, upperBound, mask);
 
-	// erosion
 	Mat mask_erode;
-	Mat erode_element = getStructuringElement(MORPH_ELLIPSE,
+	//erode(mask, mask_erode, Mat(), Point(-1, -1), erosion_size);
+	Mat element = getStructuringElement(MORPH_ELLIPSE,
 		Size(2 * erosion_size + 1, 2 * erosion_size + 1),
 		Point(erosion_size, erosion_size));
-	erode(mask, mask_erode, erode_element);
+	erode(mask, mask_erode, element);
 
-	// dilate
+	//// dilate
 	Mat mask_dilate;
+	//dilate(mask_erode, mask_dilate, Mat(), Point(-1, -1), dilation_size);
 	Mat dilate_element = getStructuringElement(MORPH_ELLIPSE,
 		Size(2 * dilation_size + 1, 2 * dilation_size + 1),
 		Point(dilation_size, dilation_size));
 	dilate(mask_erode, mask_dilate, dilate_element);
 
+	//return mask;
 	return mask_dilate;
 }
 
@@ -179,14 +193,25 @@ Mat postprocess(Mat& frame, Mat& image, Mat& detect)
 		// find the largest contour
 		std::vector<Point> maxContour = contours.at(0);
 		double maxArea = contourArea(maxContour);
-		for (int i = 0; i < contours.size(); i++) {
-			std::vector<Point> contour = contours.at(i);
+		for (std::vector<std::vector<Point>>::iterator it = contours.begin(); it != contours.end(); ++it) {
+			/* std::cout << *it; ... */
+			std::vector<Point> contour = *it;
 			double area = contourArea(contour);
 			if (area >= maxArea) {
 				maxContour = contour;
 				maxArea = area;
 			}
 		}
+
+		Moments m = moments(maxContour);
+		printf(">> cicularity =\t %f \r\n", (m.m00 * m.m00) / (m.m20 + m.m02) / (3.14 * 2));
+		//double hu[7];
+		/*HuMoments(m, hu);
+		printf(">> HuMoment\t");
+		for (int i = 0; i < 7; i++) {
+			printf(" %d", hu[i]);
+		}
+		printf("\r\n");*/
 
 		// find the min enclosing circle
 		Point2f center;
@@ -198,9 +223,10 @@ Mat postprocess(Mat& frame, Mat& image, Mat& detect)
 	}
 
 	cvtColor(detect, detect_bgr, COLOR_GRAY2BGR);
-	hconcat(frame, image, tmp1);
+	//hconcat(frame, image, tmp1);
 	hconcat(detect_bgr, draw,tmp2);
-	vconcat(tmp1, tmp2, dst);
+	//vconcat(tmp1, tmp2, dst);
 
-	return dst;
+	return tmp2;
+	//return dst;
 }
