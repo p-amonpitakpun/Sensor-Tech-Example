@@ -15,13 +15,14 @@ using namespace cv;
 
 
 int timeout = 25;
-double gamma = 0.9;
+double gamma = 0.8;
 double bound_err = 10;
 int erosion_size = 4;
 int dilation_size = 2;
-float minRadius = 5;
+float minRadius = 1;
 
 double circularity = 0.0;
+double cr = 0.00003;
 
 Scalar lowerBound;
 Scalar upperBound;
@@ -36,8 +37,8 @@ Mat postprocess(Mat& frame, Mat& image, Mat& detect);
 int main(int argc, char** argv)
 {
 	// setup begin
-	lowerBound = Scalar(13, 110, 200);
-	upperBound = Scalar(17, 255, 255);
+	lowerBound = Scalar(10, 110, 180);
+	upperBound = Scalar(20, 255, 255);
 
 	/*try {
 		printf("\r\n>> setup the ORANGE!\r\n");
@@ -140,12 +141,16 @@ Mat preprocess(Mat& src)
 	GaussianBlur(src, gblur, Size(5, 5), 5, 0);
 
 	// gamma correction
-	CV_Assert(gamma >= 0);
+	/*CV_Assert(gamma >= 0);
 	Mat src_corrected = gblur.clone();
-	LUT(gblur, gammaTable, src_corrected);
+	LUT(gblur, gammaTable, src_corrected);*/
 
 	Mat hsv;
-	cvtColor(src_corrected, hsv, COLOR_BGR2HSV);
+	cvtColor(gblur, hsv, COLOR_BGR2HSV);
+
+	Scalar m = mean(hsv);
+	printf(">> mean = %f %f %f %f \r\n ", m.val[0], m.val[1], m.val[2], m.val[3]);
+
 	return hsv;
 }
 
@@ -204,7 +209,7 @@ Mat postprocess(Mat& frame, Mat& image, Mat& detect)
 		}
 
 		Moments m = moments(maxContour);
-		printf(">> cicularity =\t %f \r\n", (m.m00 * m.m00) / (m.m20 + m.m02) / (3.14 * 2));
+		circularity = (m.m00 * m.m00) / (m.m20 + m.m02) / (3.14 * 2);
 		//double hu[7];
 		/*HuMoments(m, hu);
 		printf(">> HuMoment\t");
@@ -217,8 +222,9 @@ Mat postprocess(Mat& frame, Mat& image, Mat& detect)
 		Point2f center;
 		float radius;
 		minEnclosingCircle(maxContour, center, radius);
+		//printf(">> cicularity =\t %f \t %.9f \r\n", circularity, circularity/radius);
 
-		if (radius > minRadius)
+		if (circularity/radius > cr)
 			circle(draw, center, radius, Scalar(0, 0, 255), 5);
 	}
 
