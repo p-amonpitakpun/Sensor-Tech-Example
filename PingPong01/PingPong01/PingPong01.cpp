@@ -17,8 +17,8 @@ using namespace cv;
 int timeout = 25;
 double gamma = 0.8;
 double bound_err = 10;
-int erosion_size = 4;
-int dilation_size = 2;
+int erosion_size = 3;
+int dilation_size = 1;
 float minRadius = 1;
 
 double circularity = 0.0;
@@ -30,6 +30,7 @@ Scalar upperBound;
 Mat gammaTable(1, 256, CV_8U);
 
 void setup_orange();
+void findMinMax(Mat& src, Mat& mask, Scalar& min, Scalar& max);
 Mat preprocess(Mat& src);
 Mat ppDetect(Mat& src);
 Mat postprocess(Mat& frame, Mat& image, Mat& detect);
@@ -37,7 +38,7 @@ Mat postprocess(Mat& frame, Mat& image, Mat& detect);
 int main(int argc, char** argv)
 {
 	// setup begin
-	lowerBound = Scalar(10, 110, 180);
+	lowerBound = Scalar(15, 190, 130);
 	upperBound = Scalar(20, 255, 255);
 
 	/*try {
@@ -50,7 +51,8 @@ int main(int argc, char** argv)
 	}*/
 
 
-	VideoCapture cap(0);
+	VideoCapture cap;
+	cap.open(0);
 	if (!cap.isOpened()) {
 		printf(">> webcam error\r\n");
 		return 1;
@@ -74,16 +76,24 @@ int main(int argc, char** argv)
 		// loop begin
 		// get a new frame from camera
 		Mat frame;
-		cap >> frame;
+		//cap >> frame;
+		bool captured = cap.read(frame);
 		//flip(raw, frame, 1);
 
-		image = preprocess(frame);
+		if (captured) {
 
-		detect= ppDetect(image);
+			image = preprocess(frame);
 
-		postImage = postprocess(frame, image, detect);
+			detect = ppDetect(image);
 
-		imshow(wName, postImage);
+			postImage = postprocess(frame, image, detect);
+
+			imshow(wName, postImage);
+
+		}
+		else {
+			printf(">> ERROR : can't read the frame !");
+		}
 
 		// key check with timeout
 		if (waitKey(timeout) >= 0) break;
@@ -91,6 +101,7 @@ int main(int argc, char** argv)
 		// loop end
 	}
 
+	cap.release();
 	return 0;
 }
 
@@ -133,12 +144,26 @@ void setup_orange()
 	printf("\n\n\n");
 }
 
+void findMinMax(Mat& src, Mat& mask, Scalar& min, Scalar& max)
+{
+	int nChannels = src.channels();
+
+	Mat* channels = new Mat[nChannels];
+	split(src, channels);
+
+	for (int i = 0; i < nChannels; i++) {
+		minMaxLoc(channels[i], &min[i], &max[i], NULL, NULL, mask);
+	}
+	return;
+}
+
 Mat preprocess(Mat& src)
 {
 	Mat gblur;
 	Mat mask;
 
-	GaussianBlur(src, gblur, Size(5, 5), 5, 0);
+	//GaussianBlur(src, gblur, Size(9, 9), 5, 0);
+	bilateralFilter(src, gblur, 5, 5, 5);
 
 	// gamma correction
 	/*CV_Assert(gamma >= 0);
@@ -147,9 +172,6 @@ Mat preprocess(Mat& src)
 
 	Mat hsv;
 	cvtColor(gblur, hsv, COLOR_BGR2HSV);
-
-	Scalar m = mean(hsv);
-	printf(">> mean = %f %f %f %f \r\n ", m.val[0], m.val[1], m.val[2], m.val[3]);
 
 	return hsv;
 }
@@ -193,6 +215,7 @@ Mat postprocess(Mat& frame, Mat& image, Mat& detect)
 	findContours(detect, contours, RETR_TREE, CHAIN_APPROX_SIMPLE, Point(0, 0));
 
 	// if there is any contour
+	Mat mergeCircle;
 	if (contours.size() > 0) {
 
 		// find the largest contour
@@ -224,13 +247,47 @@ Mat postprocess(Mat& frame, Mat& image, Mat& detect)
 		minEnclosingCircle(maxContour, center, radius);
 		//printf(">> cicularity =\t %f \t %.9f \r\n", circularity, circularity/radius);
 
-		if (circularity/radius > cr)
-			circle(draw, center, radius, Scalar(0, 0, 255), 5);
+		circle(draw, center, radius, Scalar(0, 0, 255), 5);
+
+		// find colors in the detected image.
+		Scalar _mean = mean(image, detect);
+		Scalar _min, _max;
+
+		Mat blackCircle(detect.rows, detect.cols, detect.type());
+		circle(blackCircle, center, radius, Scalar(0, 0, 255), FILLED);
+		bitwise_not(blackCircle, mergeCircle, detect);
+
+		findMinMax(image, mergeCircle, _min, _max);
+
+		printf(">> detected \r\n");
+
+		// mean
+		printf("\t mean = \t ");
+		for (int i = 0; i < 4; i++) {
+			printf("%.2f  ", _mean[i]);
+		}
+		printf("\r\n");
+
+		// min
+		printf("\t min  = \t ");
+		for (int i = 0; i < 4; i++) {
+			printf("%.2f  ", _min[i]);
+		}
+		printf("\r\n");
+
+		// max
+		printf("\t max  = \t ");
+		for (int i = 0; i < 4; i++) {
+			printf("%.2f  ", _max[i]);
+		}
+		printf("\r\n");
 	}
 
+	Mat merge_bgr;
 	cvtColor(detect, detect_bgr, COLOR_GRAY2BGR);
+	cvtColor(mergeCircle, merge_bgr, COLOR_GRAY2BGR);
 	//hconcat(frame, image, tmp1);
-	hconcat(detect_bgr, draw,tmp2);
+	hconcat(merge_bgr, draw, tmp2);
 	//vconcat(tmp1, tmp2, dst);
 
 	return tmp2;
