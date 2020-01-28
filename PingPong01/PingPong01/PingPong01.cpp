@@ -166,17 +166,19 @@ Mat preprocess(Mat& src)
 	bilateralFilter(src, gblur, 5, 5, 5);
 
 	// gamma correction
-	/*CV_Assert(gamma >= 0);
+	CV_Assert(gamma >= 0);
 	Mat src_corrected = gblur.clone();
-	LUT(gblur, gammaTable, src_corrected);*/
+	LUT(gblur, gammaTable, src_corrected);
 
 	Mat hsv;
-	cvtColor(gblur, hsv, COLOR_BGR2HSV);
+	cvtColor(src_corrected, hsv, COLOR_BGR2HSV);
 
 	Scalar m = mean(hsv);
 
-	printf("MEAN  \t %.2f \t %.2f \t %.2f \n", m[0], m[1], m[2]);
-	//printf("ERROR \t (%.2f , %.2f) \t (%.2f , %.2f) \n", lowerBound[1] - m[1], upperBound[1] - m[1], lowerBound[2] - m[2], upperBound[2] - m[2]);
+	printf("MEAN  \t %.2f \t %.2f \t %.2f \t", m[0], m[1], m[2]);
+
+	lowerBound = Scalar(14, m[1] + 70, m[2] +  60);
+	upperBound = Scalar(20, m[1] + 189, m[2] + 150);
 
 	return hsv;
 }
@@ -239,6 +241,8 @@ Mat postprocess(Mat& frame, Mat& image, Mat& detect)
 		Moments m = moments(maxContour);
 		circularity = (m.m00 * m.m00) / (m.m20 + m.m02) / (3.14 * 2);
 
+		printf("CIRCULAR \t %.6f", circularity);
+
 		// find the min enclosing circle
 		Point2f center;
 		float radius;
@@ -246,6 +250,8 @@ Mat postprocess(Mat& frame, Mat& image, Mat& detect)
 
 		circle(draw, center, radius, Scalar(0, 0, 255), 5);
 	}
+
+	printf("\n");
 
 	Mat merge_bgr;
 	cvtColor(detect, detect_bgr, COLOR_GRAY2BGR);
