@@ -38,8 +38,8 @@ Mat postprocess(Mat& frame, Mat& image, Mat& detect);
 int main(int argc, char** argv)
 {
 	// setup begin
-	lowerBound = Scalar(15, 190, 130);
-	upperBound = Scalar(20, 255, 255);
+	lowerBound = Scalar(13, 140, 190);
+	upperBound = Scalar(21, 255, 255);
 
 	/*try {
 		printf("\r\n>> setup the ORANGE!\r\n");
@@ -173,6 +173,11 @@ Mat preprocess(Mat& src)
 	Mat hsv;
 	cvtColor(gblur, hsv, COLOR_BGR2HSV);
 
+	Scalar m = mean(hsv);
+
+	printf("MEAN  \t %.2f \t %.2f \t %.2f \n", m[0], m[1], m[2]);
+	//printf("ERROR \t (%.2f , %.2f) \t (%.2f , %.2f) \n", lowerBound[1] - m[1], upperBound[1] - m[1], lowerBound[2] - m[2], upperBound[2] - m[2]);
+
 	return hsv;
 }
 
@@ -233,61 +238,19 @@ Mat postprocess(Mat& frame, Mat& image, Mat& detect)
 
 		Moments m = moments(maxContour);
 		circularity = (m.m00 * m.m00) / (m.m20 + m.m02) / (3.14 * 2);
-		//double hu[7];
-		/*HuMoments(m, hu);
-		printf(">> HuMoment\t");
-		for (int i = 0; i < 7; i++) {
-			printf(" %d", hu[i]);
-		}
-		printf("\r\n");*/
 
 		// find the min enclosing circle
 		Point2f center;
 		float radius;
 		minEnclosingCircle(maxContour, center, radius);
-		//printf(">> cicularity =\t %f \t %.9f \r\n", circularity, circularity/radius);
 
 		circle(draw, center, radius, Scalar(0, 0, 255), 5);
-
-		// find colors in the detected image.
-		Scalar _mean = mean(image, detect);
-		Scalar _min, _max;
-
-		Mat blackCircle(detect.rows, detect.cols, detect.type());
-		circle(blackCircle, center, radius, Scalar(0, 0, 255), FILLED);
-		bitwise_not(blackCircle, mergeCircle, detect);
-
-		findMinMax(image, mergeCircle, _min, _max);
-
-		printf(">> detected \r\n");
-
-		// mean
-		printf("\t mean = \t ");
-		for (int i = 0; i < 4; i++) {
-			printf("%.2f  ", _mean[i]);
-		}
-		printf("\r\n");
-
-		// min
-		printf("\t min  = \t ");
-		for (int i = 0; i < 4; i++) {
-			printf("%.2f  ", _min[i]);
-		}
-		printf("\r\n");
-
-		// max
-		printf("\t max  = \t ");
-		for (int i = 0; i < 4; i++) {
-			printf("%.2f  ", _max[i]);
-		}
-		printf("\r\n");
 	}
 
 	Mat merge_bgr;
 	cvtColor(detect, detect_bgr, COLOR_GRAY2BGR);
-	cvtColor(mergeCircle, merge_bgr, COLOR_GRAY2BGR);
 	//hconcat(frame, image, tmp1);
-	hconcat(merge_bgr, draw, tmp2);
+	hconcat(detect_bgr, draw, tmp2);
 	//vconcat(tmp1, tmp2, dst);
 
 	return tmp2;
