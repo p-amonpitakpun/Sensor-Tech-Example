@@ -35,10 +35,15 @@ Mat preprocess(Mat& src);
 Mat ppDetect(Mat& src);
 Mat postprocess(Mat& frame, Mat& image, Mat& detect);
 
+
+bool findRadius(Vec3f const& circleA, Vec3f const& circleB) {
+	return circleA[2] > circleB[2];
+}
+
 int main(int argc, char** argv)
 {
 	// setup begin
-	lowerBound = Scalar(13, 140, 190);
+	lowerBound = Scalar(13, 130, 130);
 	upperBound = Scalar(21, 255, 255);
 
 	/*try {
@@ -177,8 +182,8 @@ Mat preprocess(Mat& src)
 
 	printf("MEAN  \t %.2f \t %.2f \t %.2f \t", m[0], m[1], m[2]);
 
-	lowerBound = Scalar(14, m[1] + 70, m[2] +  60);
-	upperBound = Scalar(20, m[1] + 189, m[2] + 150);
+	//lowerBound = Scalar(14, m[1] + 70, m[2] +  60);
+	//upperBound = Scalar(20, m[1] + 189, m[2] + 150);
 
 	return hsv;
 }
@@ -221,34 +226,37 @@ Mat postprocess(Mat& frame, Mat& image, Mat& detect)
 	std::vector<std::vector<Point>> contours;
 	findContours(detect, contours, RETR_TREE, CHAIN_APPROX_SIMPLE, Point(0, 0));
 
-	// if there is any contour
+	//if there is any contour
 	Mat mergeCircle;
-	if (contours.size() > 0) {
+	for (size_t i = 0; i < contours.size(); i++) {
+		std::vector<Point> contour = contours[i], approx;
 
-		// find the largest contour
-		std::vector<Point> maxContour = contours.at(0);
-		double maxArea = contourArea(maxContour);
-		for (std::vector<std::vector<Point>>::iterator it = contours.begin(); it != contours.end(); ++it) {
-			/* std::cout << *it; ... */
-			std::vector<Point> contour = *it;
-			double area = contourArea(contour);
-			if (area >= maxArea) {
-				maxContour = contour;
-				maxArea = area;
-			}
-		}
 
-		Moments m = moments(maxContour);
-		circularity = (m.m00 * m.m00) / (m.m20 + m.m02) / (3.14 * 2);
 
-		printf("CIRCULAR \t %.6f", circularity);
+		double arc = arcLength(contour, 1);
+		
+		approxPolyDP(contour, approx, 0.1 * arc, 1);
 
-		// find the min enclosing circle
-		Point2f center;
-		float radius;
-		minEnclosingCircle(maxContour, center, radius);
+		double perimeter	= arcLength(approx, 1);
+		double area			= contourArea(approx);
 
-		circle(draw, center, radius, Scalar(0, 0, 255), 5);
+		double circularity = 4 * 3.14 * area / (perimeter * perimeter);
+		printf("\n\t c = %.6f\n", circularity);
+	}
+
+	GaussianBlur(detect, detect, Size(9, 9), 2, 2);
+
+	std::vector<Vec3f> circles;
+	HoughCircles(detect, circles, HOUGH_GRADIENT, 2, detect.rows / 4, 200, 50);
+
+	std::sort(circles.begin(), circles.end(), findRadius);
+	for (size_t i = 0; i < (circles.size() < 5 ? circles.size() : 5); i++) {
+		Point center(cvRound(circles[i][0]), cvRound(circles[i][1]));
+		int radius = cvRound(circles[i][2]);
+		// draw the circle center
+		circle(draw, center, 3, Scalar(0, 255, 0), -1, 8, 0);
+		// draw the circle outline
+		circle(draw, center, radius, Scalar(0, 0, 255), 3, 8, 0);
 	}
 
 	printf("\n");
