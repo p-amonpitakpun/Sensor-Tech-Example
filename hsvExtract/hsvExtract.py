@@ -39,7 +39,7 @@ if __name__ == "__main__":
 
     fig, axs = plt.subplots(c, 1, figsize=(8, 8))
 
-    fig, ax = plt.subplots(figsize=(10, 10))
+    fig, ax = plt.subplots(2, figsize=(5, 10))
 
     for i in range(c):
 
@@ -60,9 +60,15 @@ if __name__ == "__main__":
 
     for i in range(3):
         orangesArray = orangesArrays[i]
+        w = orangesArray[0].reshape((-1, ))
         x = orangesArray[1].reshape((-1, ))
         y = orangesArray[2].reshape((-1, ))
-        ax.scatter(x, y, s=2, alpha=0.1, label=name[i])
-
-    ax.legend()
+        ax[0].scatter(y, w, s=2, alpha=0.3, label=name[i])
+        ax[1].scatter(y, x, s=2, alpha=0.3, label=name[i])
+    ax[0].set_xlabel("V")
+    ax[0].set_ylabel("H")
+    ax[0].legend()
+    ax[1].set_xlabel("V")
+    ax[1].set_ylabel("S")
+    ax[1].legend()
     plt.show()
