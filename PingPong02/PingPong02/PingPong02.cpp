@@ -15,12 +15,10 @@ using namespace cv;
 
 
 int timeout = 25;
-double gamma = 0.8;
-double bound_err = 10;
 int erosion_size = 3;
 int dilation_size = 1;
-float minRadius = 1;
 
+double thresh = 500;
 double circularity = 0.0;
 double cr = 0.00003;
 
@@ -29,32 +27,14 @@ Scalar upperBound;
 
 Mat gammaTable(1, 256, CV_8U);
 
-void setup_orange();
 void findMinMax(Mat& src, Mat& mask, Scalar& min, Scalar& max);
-Mat preprocess(Mat& src);
-Mat ppDetect(Mat& src);
-Mat postprocess(Mat& frame, Mat& image, Mat& detect);
-
-
-bool findRadius(Vec3f const& circleA, Vec3f const& circleB) {
-	return circleA[2] > circleB[2];
-}
+Mat process(Mat& frame);
 
 int main(int argc, char** argv)
 {
 	// setup begin
-	lowerBound = Scalar(13, 130, 130);
-	upperBound = Scalar(21, 255, 255);
-
-	/*try {
-		printf("\r\n>> setup the ORANGE!\r\n");
-		setup_orange();
-	}
-	catch (const std::exception& e) {
-		std::cout << e.what() << std::endl;
-		printf("\r\n>> can't find the ORANGE!\r\n");
-	}*/
-
+	lowerBound = Scalar(65, 0, 160);
+	upperBound = Scalar(180, 40, 235);
 
 	VideoCapture cap;
 	cap.open(0);
@@ -72,29 +52,13 @@ int main(int argc, char** argv)
 
 	namedWindow(wName, 1);
 
-	uchar* p = gammaTable.ptr();
-	for (int i = 0; i < 256; ++i)
-		p[i] = saturate_cast<uchar>(pow(i / 255.0, gamma) * 255.0);
-	// setup end
-
 	for (;;) {
 		// loop begin
-		// get a new frame from camera
 		Mat frame;
-		//cap >> frame;
 		bool captured = cap.read(frame);
-		//flip(raw, frame, 1);
 
 		if (captured) {
-
-			image = preprocess(frame);
-
-			detect = ppDetect(image);
-
-			postImage = postprocess(frame, image, detect);
-
-			imshow(wName, postImage);
-
+			imshow(wName, process(frame));
 		}
 		else {
 			printf(">> ERROR : can't read the frame !");
@@ -110,45 +74,6 @@ int main(int argc, char** argv)
 	return 0;
 }
 
-void setup_orange()
-{
-	Mat orange = imread(samples::findFile("orange.png"), IMREAD_COLOR);
-	printf(">> orange !!! \n");
-	printf("|  width \t = %d \n", orange.rows);
-	printf("|  height \t = %d \n", orange.cols);
-	printf("|  channels \t = %d \n", orange.channels());
-
-	Mat orange_blur;
-	GaussianBlur(orange, orange_blur, Size(15, 15), 25, 0);
-
-	Mat orange_hsv;
-	cvtColor(orange_blur, orange_hsv, COLOR_BGR2HSV);
-
-	int nChannels = orange_hsv.channels();
-	Mat* orangeChannels = new Mat[nChannels];
-	split(orange_hsv, orangeChannels);
-
-	double* x_min = new double[nChannels];
-	double* x_max = new double[nChannels];
-
-	printf("|  ----\n");
-	printf("|  min \t\t max\n");
-	for (int i = 0; i < nChannels; i++) {
-		minMaxLoc(orangeChannels[i], &x_min[i], &x_max[i]);
-		printf("|  %.2f \t %.2f\n", x_min[i], x_max[i]);
-	}
-
-	CV_Assert(nChannels == 3);
-	lowerBound = Scalar(x_min[0] - 10,
-		x_min[1],
-		x_min[2] - 10);
-	upperBound = Scalar(x_max[0] + 10,
-		255,
-		255);
-
-	printf("\n\n\n");
-}
-
 void findMinMax(Mat& src, Mat& mask, Scalar& min, Scalar& max)
 {
 	int nChannels = src.channels();
@@ -162,111 +87,57 @@ void findMinMax(Mat& src, Mat& mask, Scalar& min, Scalar& max)
 	return;
 }
 
-Mat preprocess(Mat& src)
+static double angle(Point pt1, Point pt2, Point pt0)
+{
+	double dx1 = pt1.x - pt0.x;
+	double dy1 = pt1.y - pt0.y;
+	double dx2 = pt2.x - pt0.x;
+	double dy2 = pt2.y - pt0.y;
+	return (dx1 * dx2 + dy1 * dy2) / sqrt((dx1 * dx1 + dy1 * dy1) * (dx2 * dx2 + dy2 * dy2) + 1e-10);
+}
+
+Mat process(Mat& frame)
 {
 	Mat gblur;
-	Mat mask;
 
-	//GaussianBlur(src, gblur, Size(9, 9), 5, 0);
-	bilateralFilter(src, gblur, 5, 5, 5);
-
-	// gamma correction
-	CV_Assert(gamma >= 0);
-	Mat src_corrected = gblur.clone();
-	LUT(gblur, gammaTable, src_corrected);
+	GaussianBlur(frame, gblur, Size(9, 9), 5, 0);
 
 	Mat hsv;
-	cvtColor(src_corrected, hsv, COLOR_BGR2HSV);
+	cvtColor(gblur, hsv, COLOR_BGR2HSV);
 
-	Scalar m = mean(hsv);
+	Mat gray;
+	cvtColor(gblur, gray, COLOR_BGR2GRAY);
 
-	printf("MEAN  \t %.2f \t %.2f \t %.2f \t", m[0], m[1], m[2]);
+	// find edges
+	Mat canny;
+	Canny(gray, canny, 0, thresh, 5);
+	dilate(canny, canny, Mat(), Point(-1, -1));
 
-	//lowerBound = Scalar(14, m[1] + 70, m[2] +  60);
-	//upperBound = Scalar(20, m[1] + 189, m[2] + 150);
-
-	return hsv;
-}
-
-Mat ppDetect(Mat& src)
-{
-	Mat mask;
-	Mat dst;
-
-	// color detection
-	inRange(src, lowerBound, upperBound, mask);
-
-	Mat mask_erode;
-	//erode(mask, mask_erode, Mat(), Point(-1, -1), erosion_size);
-	Mat element = getStructuringElement(MORPH_ELLIPSE,
-		Size(2 * erosion_size + 1, 2 * erosion_size + 1),
-		Point(erosion_size, erosion_size));
-	erode(mask, mask_erode, element);
-
-	//// dilate
-	Mat mask_dilate;
-	//dilate(mask_erode, mask_dilate, Mat(), Point(-1, -1), dilation_size);
-	Mat dilate_element = getStructuringElement(MORPH_ELLIPSE,
-		Size(2 * dilation_size + 1, 2 * dilation_size + 1),
-		Point(dilation_size, dilation_size));
-	dilate(mask_erode, mask_dilate, dilate_element);
-
-	//return mask;
-	return mask_dilate;
-}
-
-Mat postprocess(Mat& frame, Mat& image, Mat& detect)
-{
-	Mat tmp1, tmp2;
-	Mat detect_bgr;
-	Mat draw = frame.clone();
-	Mat dst;
-
-	// find contours
+	// Find contours
 	std::vector<std::vector<Point>> contours;
-	findContours(detect, contours, RETR_TREE, CHAIN_APPROX_SIMPLE, Point(0, 0));
+	findContours(canny, contours, RETR_TREE, CHAIN_APPROX_SIMPLE);
 
-	//if there is any contour
-	Mat mergeCircle;
+	Mat draw = frame.clone();
+	std::vector<Point> approx;
+
 	for (size_t i = 0; i < contours.size(); i++) {
-		std::vector<Point> contour = contours[i], approx;
+		approxPolyDP(contours[i], approx, arcLength(contours[i], true) * 0.02, true);
+		if (approx.size() == 4 &&
+			fabs(contourArea(approx)) > 1000 &&
+			isContourConvex(approx))
+		{
+			Rect boundRect = boundingRect(approx); 
+			Point center(boundRect.x + 0.5 * boundRect.width, boundRect.y + 0.5 * boundRect.height);
+			Vec3b rectColor = frame.at<Vec3b>(center);
+			rectangle(draw, boundRect, rectColor, -1);
 
+			//polylines(draw, approx, true, Scalar(255, 0, 0), 3);
 
-
-		double arc = arcLength(contour, 1);
-		
-		approxPolyDP(contour, approx, 0.1 * arc, 1);
-
-		double perimeter	= arcLength(approx, 1);
-		double area			= contourArea(approx);
-
-		double circularity = 4 * 3.14 * area / (perimeter * perimeter);
-		printf("\n\t c = %.6f\n", circularity);
+			putText(draw, "RECT", center, FONT_HERSHEY_PLAIN, 1, Scalar(255, 255, 255), 2);
+		}
 	}
 
-	GaussianBlur(detect, detect, Size(9, 9), 2, 2);
-
-	std::vector<Vec3f> circles;
-	HoughCircles(detect, circles, HOUGH_GRADIENT, 2, detect.rows / 4, 200, 50);
-
-	std::sort(circles.begin(), circles.end(), findRadius);
-	for (size_t i = 0; i < (circles.size() < 5 ? circles.size() : 5); i++) {
-		Point center(cvRound(circles[i][0]), cvRound(circles[i][1]));
-		int radius = cvRound(circles[i][2]);
-		// draw the circle center
-		circle(draw, center, 3, Scalar(0, 255, 0), -1, 8, 0);
-		// draw the circle outline
-		circle(draw, center, radius, Scalar(0, 0, 255), 3, 8, 0);
-	}
-
-	printf("\n");
-
-	Mat merge_bgr;
-	cvtColor(detect, detect_bgr, COLOR_GRAY2BGR);
-	//hconcat(frame, image, tmp1);
-	hconcat(detect_bgr, draw, tmp2);
-	//vconcat(tmp1, tmp2, dst);
-
+	Mat tmp1, tmp2;
+	hconcat(frame, draw, tmp2);
 	return tmp2;
-	//return dst;
 }
