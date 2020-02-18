@@ -27,6 +27,62 @@ Scalar upperBound;
 
 Mat gammaTable(1, 256, CV_8U);
 
+const size_t nColorList = 11;
+
+struct colorStruct {
+	char name[20];
+	double color[3];
+};
+
+typedef colorStruct colorPoint;
+
+colorPoint colorList[11] = {
+	{
+		"brown",
+		{ 0.469525490 , 0.248035196 , 0.147159020 }
+	},
+	{
+		"dark_blue",
+		{ 0.084106176 , 0.191335098 , 0.565377745 }
+	},
+	{
+		"dark_green",
+		{ 0.075102353 , 0.200504902 , 0.124711863 }
+	},
+	{
+		"forest_green",
+		{ 0.109641471 , 0.348973039 , 0.202970784 }
+	},
+	{
+		"light_blue",
+		{ 0.146241078 , 0.585789216 , 0.779026765 }
+	},
+	{
+		"light_green",
+		{ 0.271230490 , 0.448678235 , 0.106501667 }
+	},
+	{
+		"orange",
+		{ 0.574475098 , 0.183433922 , 0.098825686 }
+	},
+	{
+		"pink",
+		{ 0.731312745 , 0.202826471 , 0.463220098 }
+	},
+	{
+		"purple",
+		{ 0.495675294 , 0.158975980 , 0.428593137 }
+	},
+	{
+		"red",
+		{ 0.694599608 , 0.158629804 , 0.144396569 }
+	},
+	{
+		"yellow",
+		{ 0.957700000 , 0.881482059 , 0.129532941 }
+	}
+};
+
 void findMinMax(Mat& src, Mat& mask, Scalar& min, Scalar& max);
 Mat process(Mat& frame);
 
@@ -96,6 +152,36 @@ static double angle(Point pt1, Point pt2, Point pt0)
 	return (dx1 * dx2 + dy1 * dy2) / sqrt((dx1 * dx1 + dy1 * dy1) * (dx2 * dx2 + dy2 * dy2) + 1e-10);
 }
 
+double euDistant(Vec3b color, colorPoint cPoint) {
+	double r = color[2];
+	double g = color[1];
+	double b = color[0];
+	double rgb = r + g + b;
+	double rn = r / rgb;
+	double gn = g / rgb;
+	double bn = b / rgb;
+
+	double dr = (rn - cPoint.color[0]);
+	double dg = (gn - cPoint.color[1]);
+	double db = (bn - cPoint.color[2]);
+
+	return dr * dr + dg * dg + db * db;
+}
+
+void detectColor(Vec3b color, char str[20])
+{
+	double minDist = euDistant(color, colorList[0]), dist;
+	size_t index = 0;
+	for (size_t i = 1; i < nColorList; i++) {
+		dist = euDistant(color, colorList[i]);
+		if (dist <= minDist) {
+			minDist = dist;
+			index = i;
+		}
+	}
+	strcpy_s(str, 20, colorList[index].name);
+}
+
 Mat process(Mat& frame)
 {
 	Mat gblur;
@@ -128,12 +214,34 @@ Mat process(Mat& frame)
 		{
 			Rect boundRect = boundingRect(approx); 
 			Point center(boundRect.x + 0.5 * boundRect.width, boundRect.y + 0.5 * boundRect.height);
-			Vec3b rectColor = frame.at<Vec3b>(center);
+			
+
+			// find the average color of the rectangle
+			size_t near = 5;
+			if (min(boundRect.width, boundRect.height) < (near * 2)) break;
+
+			double r = 0, g = 0, b = 0;
+			for (size_t i = 0; i < (near * 2); i++) {
+				for (size_t j = 0; j < (near * 2); j++) {
+					Point point(center.x - near + i, center.y - near + i);
+					Vec3b color = gblur.at<Vec3b>(point);
+					r += color[2];
+					g += color[1];
+					b += color[0];
+				}
+			}
+			int nPoint = ((int)near * 2) * ((int)near * 2);
+			r /= nPoint;
+			g /= nPoint;
+			b /= nPoint;
+			Vec3b rectColor(b, g, r);
 			rectangle(draw, boundRect, rectColor, -1);
 
-			//polylines(draw, approx, true, Scalar(255, 0, 0), 3);
 
-			putText(draw, "RECT", center, FONT_HERSHEY_PLAIN, 1, Scalar(255, 255, 255), 2);
+			//polylines(draw, approx, true, Scalar(255, 0, 0), 3);
+			char colorString[20] = "N/A";
+			detectColor(rectColor, colorString);
+			putText(draw, colorString, center, FONT_HERSHEY_PLAIN, 1, Scalar(255, 255, 255), 1);
 		}
 	}
 
