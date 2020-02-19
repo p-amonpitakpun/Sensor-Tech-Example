@@ -161,11 +161,13 @@ double euDistant(Vec3b color, colorPoint cPoint) {
 	double gn = g / rgb;
 	double bn = b / rgb;
 
-	double dr = (rn - cPoint.color[0]);
-	double dg = (gn - cPoint.color[1]);
-	double db = (bn - cPoint.color[2]);
+	double cnorm = (double) cPoint.color[0] + (double) cPoint.color[1] + (double) cPoint.color[2];
 
-	return dr * dr + dg * dg + db * db;
+	double dr = (rn - cPoint.color[0] / cnorm);
+	double dg = (gn - cPoint.color[1] / cnorm);
+	double db = (bn - cPoint.color[2] / cnorm);
+
+	return sqrt(dr * dr + dg * dg + db * db);
 }
 
 void detectColor(Vec3b color, char str[20])
