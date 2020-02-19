@@ -101,12 +101,12 @@ int main(int argc, char** argv)
 
 	Mat raw;
 	Mat image;
-	Mat detect;
-	Mat postImage;
 
 	String wName = "videocapture";
 
 	namedWindow(wName, 1);
+
+	int fileID = 0;
 
 	for (;;) {
 		// loop begin
@@ -114,14 +114,23 @@ int main(int argc, char** argv)
 		bool captured = cap.read(frame);
 
 		if (captured) {
-			imshow(wName, process(frame));
+			image = process(frame);
+			imshow(wName, image);
 		}
 		else {
 			printf(">> ERROR : can't read the frame !");
 		}
 
 		// key check with timeout
-		if (waitKey(timeout) >= 0) break;
+		char key = waitKey(timeout);
+		if (key == 32) {
+			char fileName[20] = "";
+			sprintf_s(fileName, "frame_%03d.png", fileID);
+			imwrite(fileName, frame);
+			sprintf_s(fileName, "image_%03d.png", fileID);
+			imwrite(fileName, image);
+			fileID++;
+		} else if (key >= 0) break;
 		if (getWindowProperty(wName, WND_PROP_VISIBLE) == 0) break;
 		// loop end
 	}
@@ -247,7 +256,7 @@ Mat process(Mat& frame)
 		}
 	}
 
-	Mat tmp1, tmp2;
-	hconcat(frame, draw, tmp2);
-	return tmp2;
+	//Mat tmp1, tmp2;
+	//hconcat(frame, draw, tmp2);
+	return draw;
 }
