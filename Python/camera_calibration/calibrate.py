@@ -20,7 +20,7 @@ pattern_size = (7, 9)
 
 images = glob.glob('checkboard/*.png')
 n_img = len(images)
-max_img = 25
+max_img = 200
 images = np.random.choice(images, max_img, replace=False)
 
 print("Checkboard Calibration")
@@ -30,7 +30,7 @@ if (n_img > 0):
     i = 1
     for fname in images:
 
-        print("read image", fname, ">>", i)
+        print("read image", fname, ">>", i, end="")
 
         img = cv2.imread(fname)
         gray = cv2.cvtColor(img,cv2.COLOR_BGR2GRAY)
@@ -40,17 +40,22 @@ if (n_img > 0):
 
         # If found, add object points, image points (after refining them)
         if ret == True:
-            objpoints.append(objp)
+            if len(corners) == (pattern_size[0] * pattern_size[1]):
+                objpoints.append(objp)
 
-            corners2 = cv2.cornerSubPix(gray,corners,(11,11),(-1,-1),criteria)
-            imgpoints.append(corners2)
+                corners2 = cv2.cornerSubPix(gray,corners,(11,11),(-1,-1),criteria)
+                print("\tcorners =", len(corners2))
+                imgpoints.append(corners2)
 
-            # Draw and display the corners
-            img = cv2.drawChessboardCorners(img, pattern_size, corners2,ret)
-            cv2.imshow('img',img)
-            i += 1
-            key = cv2.waitKey(15)
-            if key == 24: break
+                # Draw and display the corners
+                img = cv2.drawChessboardCorners(img, pattern_size, corners2,ret)
+                cv2.imshow('img',img)
+                i += 1
+                key = cv2.waitKey(15)
+        else:
+            print("\tnot found")
+
+        if key == 24: break
 
     print("/*-------start calibration-------*/")
 
