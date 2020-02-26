@@ -13,14 +13,14 @@ class Box3d:
 
         # termination criteria
         self.criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 30, 0.001)
-
-        self.axis = np.float32([[0,0,0], [0,8,0], [6,8,0], [6,0,0], [0,0,-3],[0,8,-3],[6,8,-3],[6,0,-3] ])
+        w, h, d = 6, 8, 6
+        self.axis = np.float32([[0,0,0], [0,h,0], [w,h,0], [w,0,0], [0,0,-d],[0,h,-d],[w,h,-d],[w,0,-d] ])
         
         # prepare object points, like (0,0,0), (1,0,0), (2,0,0) ....,(6,5,0)
         self.objp = np.zeros((hp * wp,3), np.float32)
         self.objp[:, :2] = np.mgrid[0:hp, 0:wp].T.reshape(-1, 2)
 
-        self.mtx = np.array(config["mtx"])
+        self.mtx = np.array(config["newcameramtx"])
         self.dist = np.array(config["dist"])
 
 
@@ -81,7 +81,7 @@ if __name__ == "__main__":
             
             # cv2.imshow("frame", frame)
 
-            frame = cv2.bilateralFilter(frame, 3, 25, 25)
+            # frame = cv2.bilateralFilter(frame, 3, 25, 25)
             h, w = frame.shape[:2]
             newcameramtx, roi = cv2.getOptimalNewCameraMatrix(mtx, dist, (w, h), 1, (w, h))
             x,y,w,h = roi
